@@ -1,26 +1,83 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>QR Secure Enterprise File Transfer</title>
-    <link rel="stylesheet" href="/static/css/style.css" />
-  </head>
-  <body>
-    <main class="page-shell">
-      <section class="hero-card">
-        <p class="eyebrow">Enterprise Internal Utility</p>
-        <h1>QR Secure Enterprise File Transfer</h1>
-        <p class="hero-copy">
-          A lightweight foundation for secure file transfer workflows designed for
-          internal enterprise use.
-        </p>
-        <button class="primary-button" type="button">Receive File</button>
-      </section>
-    </main>
+{% set page = "dashboard" %}
+{% extends "base.html" %}
 
-    <footer class="footer">
-      <p>System Ready</p>
-    </footer>
-  </body>
-</html>
+{% block title %}Corporate Transfer Dashboard · AISIN Secure File Transfer{% endblock %}
+
+{% block content %}
+  <section class="dashboard-grid">
+    <div class="card dashboard-card">
+      <div class="card-header">
+        <div>
+          <p class="eyebrow">Receive File</p>
+          <h2>Generate a QR code for secure upload</h2>
+        </div>
+      </div>
+
+      <form class="dashboard-form" id="qr-form">
+        <label for="employee-code">Employee Code</label>
+        <input id="employee-code" class="input-field" type="text" placeholder="Enter employee code" autocomplete="off" />
+        <button id="generate-qr" class="primary-button" type="submit">Generate QR</button>
+        <p id="dashboard-message" class="validation-message"></p>
+      </form>
+
+      <div class="preview-panel" id="qr-preview-panel">
+        <div class="preview-card">
+          <p class="preview-label">QR Preview</p>
+          <div class="preview-placeholder" id="qr-preview">
+            <p>No QR generated yet</p>
+          </div>
+        </div>
+
+        <div class="session-summary">
+          <div class="detail-card">
+            <strong>Session ID</strong>
+            <p id="dashboard-session-id">—</p>
+          </div>
+          <div class="detail-card">
+            <strong>Expiry</strong>
+            <p id="dashboard-expiry">—</p>
+          </div>
+          <div class="detail-card">
+            <strong>Status</strong>
+            <p id="dashboard-status">Waiting for file upload...</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card dashboard-card">
+      <div class="card-header">
+        <div>
+          <p class="eyebrow">Transfer Status</p>
+          <h2>Session information</h2>
+        </div>
+      </div>
+
+      <div class="detail-grid">
+        <div class="info-card info-card--highlight">
+          <strong>Instructions</strong>
+          <p>Generate a QR code, then ask the employee to scan it and upload files in the browser.</p>
+        </div>
+        <div class="info-card info-card--ready">
+          <strong>Session status</strong>
+          <p id="dashboard-status">Waiting for upload</p>
+        </div>
+        <div class="info-card info-card--actions">
+          <strong>Download ready</strong>
+          <div class="download-actions">
+            <button id="download-file-button" class="primary-button" type="button" disabled>Download First File</button>
+            <button id="download-all-button" class="secondary-button" type="button" disabled>Download All Files</button>
+          </div>
+          <p id="download-file-name" class="validation-message"></p>
+        </div>
+      </div>
+
+      <div class="recent-card">
+        <p class="preview-label">Uploaded files</p>
+        <div class="recent-placeholder">
+          <ul id="uploaded-files-list"></ul>
+        </div>
+      </div>
+    </div>
+  </section>
+{% endblock %}

@@ -1,1 +1,1 @@
-"""Utility helpers package for the QR transfer system."""
+"""Utility helpers package for the AISIN Secure File Transfer."""

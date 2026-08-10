@@ -1,4 +1,4 @@
-# QR Transfer System
+# AISIN Secure File Transfer
 
 ## Overview
 
@@ -36,7 +36,7 @@ The project is organized into modular directories for configuration, routes, ser
 
 ## Running the Project
 
-The development server will serve the landing page at `http://127.0.0.1:8000/`.
+The development server will serve the landing page at the public URL configured in `SERVER_URL`.
 
 ## Development Roadmap
 

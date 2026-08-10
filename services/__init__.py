@@ -1,1 +1,1 @@
-"""Service layer package for the QR transfer system."""
+"""Service layer package for the AISIN Secure File Transfer."""

@@ -1,1 +1,1 @@
-"""Configuration package for the QR transfer system."""
+"""Configuration package for the AISIN Secure File Transfer."""

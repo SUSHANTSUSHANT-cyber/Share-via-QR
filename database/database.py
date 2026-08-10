@@ -6,6 +6,7 @@ library sqlite3 module. Each operation opens and closes its own connection.
 
 from __future__ import annotations
 
+import json
 import logging
 import sqlite3
 from datetime import datetime
@@ -26,6 +27,24 @@ def _get_connection() -> sqlite3.Connection:
     return connection
 
 
+def _serialize_storage_metadata(storage_metadata: dict[str, Any] | None) -> str | None:
+    """Serialize storage metadata for database persistence."""
+    if storage_metadata is None:
+        return None
+    return json.dumps(storage_metadata)
+
+
+def _deserialize_storage_metadata(value: str | None) -> dict[str, Any]:
+    """Deserialize storage metadata from the database."""
+    if not value:
+        return {}
+    try:
+        parsed = json.loads(value)
+    except (TypeError, json.JSONDecodeError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
 def initialize_database() -> None:
     """Create the database file and transfer_sessions table if needed."""
     database_path = Path(settings.database_path)
@@ -43,10 +62,17 @@ def initialize_database() -> None:
                     created_at TEXT,
                     expires_at TEXT,
                     uploaded_at TEXT,
-                    downloaded_at TEXT
+                    downloaded_at TEXT,
+                    storage_metadata TEXT
                 )
                 """
             )
+            columns = {
+                row[1]
+                for row in connection.execute("PRAGMA table_info(transfer_sessions)").fetchall()
+            }
+            if "storage_metadata" not in columns:
+                connection.execute("ALTER TABLE transfer_sessions ADD COLUMN storage_metadata TEXT")
             connection.commit()
         logger.info("Database initialized at %s", database_path)
     except sqlite3.Error as exc:
@@ -99,6 +125,21 @@ def create_session(
         raise
 
 
+def update_storage_metadata(session_id: str, storage_metadata: dict[str, Any]) -> SessionRecord | None:
+    """Persist storage metadata for a session."""
+    try:
+        with _get_connection() as connection:
+            connection.execute(
+                "UPDATE transfer_sessions SET storage_metadata = ? WHERE session_id = ?",
+                (_serialize_storage_metadata(storage_metadata), session_id),
+            )
+            connection.commit()
+        return get_session(session_id)
+    except sqlite3.Error as exc:
+        logger.exception("Failed to update storage metadata for session %s: %s", session_id, exc)
+        raise
+
+
 def get_session(session_id: str) -> SessionRecord | None:
     """Fetch a single session by its identifier."""
     try:
@@ -109,7 +150,9 @@ def get_session(session_id: str) -> SessionRecord | None:
             ).fetchone()
         if row is None:
             return None
-        return SessionRecord.model_validate(dict(row))
+        data = dict(row)
+        data["storage_metadata"] = _deserialize_storage_metadata(data.get("storage_metadata"))
+        return SessionRecord.model_validate(data)
     except sqlite3.Error as exc:
         logger.exception("Failed to fetch session %s: %s", session_id, exc)
         raise

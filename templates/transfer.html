@@ -1,0 +1,41 @@
+{% set page = "transfer" %}
+{% extends "base.html" %}
+
+{% block title %}Transfer QR · AISIN Secure File Transfer{% endblock %}
+
+{% block content %}
+  <section class="hero-card transfer-card">
+    <p class="eyebrow">Secure enterprise transfer</p>
+    <h1>Scan the QR code to upload</h1>
+    <p class="hero-copy">Your transfer session is active. Scan the code with a mobile device to continue the upload.</p>
+
+    <div class="qr-shell">
+      <div class="qr-box">
+        <img class="qr-image" src="data:image/png;base64,{{ qr_data }}" alt="Transfer QR code" />
+        <div class="detail-grid">
+          <div class="detail-card">
+            <strong>Session ID</strong>
+            <p>{{ session.session_id }}</p>
+          </div>
+          <div class="detail-card">
+            <strong>Status</strong>
+            <p>{{ session.status | capitalize }}</p>
+          </div>
+          <div class="detail-card">
+            <strong>Expiry</strong>
+            <p id="session-expiry-value">{{ session.expires_at }}</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>How to use this QR code</h2>
+        <ol class="instructions">
+          <li><strong>1.</strong> Open the phone camera and scan the QR code.</li>
+          <li><strong>2.</strong> Confirm the upload session in the browser.</li>
+          <li><strong>3.</strong> Select files and submit securely.</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+{% endblock %}

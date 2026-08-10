@@ -1,1 +1,1 @@
-"""Route package for the QR transfer system."""
+"""Route package for the AISIN Secure File Transfer."""

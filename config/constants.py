@@ -1,4 +1,4 @@
-"""Application constants for the QR transfer system.
+"""Constants used throughout the AISIN Secure File Transfer application.
 
 These constants provide reusable status values and defaults to keep the codebase
 consistent and free of magic strings.
@@ -6,9 +6,10 @@ consistent and free of magic strings.
 
 from __future__ import annotations
 
-APP_NAME = "QR Transfer System"
-DEFAULT_HOST = "127.0.0.1"
-DEFAULT_PORT = 8000
+APP_NAME = "AISIN Secure File Transfer"
+DEFAULT_HOST = "0.0.0.0"
+DEFAULT_PORT = 9000
+DEFAULT_SERVER_URL = "https://your-public-domain.example.com"
 
 STATUS_CREATED = "created"
 STATUS_UPLOADED = "uploaded"
