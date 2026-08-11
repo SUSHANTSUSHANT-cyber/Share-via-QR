@@ -13,7 +13,7 @@
 
         <div class="input-group">
           <label for="file-input">Choose files</label>
-          <input class="file-input" type="file" id="file-input" name="files" multiple accept=".pdf,.docx,.xlsx,.pptx,.txt,.csv,.png,.jpg,.jpeg,.webp" />
+          <input class="file-input" type="file" id="file-input" name="files" multiple accept=".pdf,.docx,.xlsx,.pptx,.txt,.csv,.png,.jpg,.jpeg,.webp,.mp4,.mov,.webm,.avi,.mkv,video/mp4,video/quicktime,video/webm,video/x-msvideo,video/x-matroska" />
         </div>
 
         <div class="upload-file-list" id="upload-file-list">
@@ -48,6 +48,10 @@
           <p id="session-expiry-value">{{ session.expires_at }}</p>
         </div>
         <div class="detail-card">
+          <strong>Max file size</strong>
+          <p>{{ max_file_size_mb }} MB</p>
+        </div>
+        <div class="detail-card">
           <strong>Selected File</strong>
           <p id="selected-file-name">None</p>
         </div>
@@ -55,6 +59,7 @@
           <strong>File Size</strong>
           <p id="selected-file-size">—</p>
         </div>
+        <span id="max-file-size-value" data-max-file-size="{{ max_file_size_mb }}" hidden></span>
       </div>
     </div>
   </section>

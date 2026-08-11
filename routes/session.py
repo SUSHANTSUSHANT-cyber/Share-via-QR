@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, Response, Depends
 
 from models.session import SessionCreateRequest, SessionRecord, SessionResponse
 from services.qr_service import QRService
 from services.session_service import SessionService
 
-router = APIRouter(prefix="/session", tags=["session"])
+from utils.security import require_receiver
+
+router = APIRouter(prefix="/session", tags=["session"], dependencies=[Depends(require_receiver)])
 service = SessionService()
 qr_service = QRService()
 

@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 from config.constants import STATUS_CREATED, STATUS_DOWNLOADED, STATUS_EXPIRED, STATUS_UPLOADED
 from config.settings import settings
 from database.database import create_session as create_session_record
+from database.database import update_storage_metadata
 from database.database import delete_session as delete_session_record
 from database.database import get_session as get_session_record
 from database.database import mark_downloaded as mark_session_downloaded
@@ -61,6 +62,7 @@ class SessionService:
                 status=STATUS_CREATED,
                 created_at=created_at,
                 expires_at=expires_at,
+                hostname=request.hostname,
             )
         except sqlite3.Error as exc:
             self.logger.exception("Failed to create session for employee %s", employee_code)
@@ -70,11 +72,30 @@ class SessionService:
         return SessionResponse(
             session_id=record.session_id,
             employee_code=record.employee_code,
+            hostname=record.hostname,
             status=record.status,
             created_at=record.created_at,
             expires_at=record.expires_at,
             folder_name=record.folder_name,
         )
+
+    def _store_session_hostname(self, session_id: str, hostname: str) -> None:
+        """Persist the receiver hostname into session storage metadata."""
+        record = get_session_record(session_id)
+        if record is None:
+            self.logger.warning("Failed to store hostname for missing session: %s", session_id)
+            return
+
+        metadata = record.storage_metadata or {}
+        metadata["receiver_hostname"] = hostname
+        try:
+            update_storage_metadata(session_id, metadata)
+        except sqlite3.Error as exc:
+            self.logger.exception(
+                "Failed to persist receiver hostname for session %s: %s",
+                session_id,
+                exc,
+            )
 
     def get_session(self, session_id: str) -> SessionRecord | JSONResponse:
         """Retrieve a session record and return a 410 response for expired sessions."""
@@ -97,7 +118,6 @@ class SessionService:
             )
 
         files = self.get_uploaded_files(session_id)
-        # Convert dict metadata into SessionFile instances for Pydantic compatibility
         file_models: list[SessionFile] = []
         for f in files:
             file_models.append(
@@ -164,6 +184,105 @@ class SessionService:
             self.logger.warning("Failed to find session when marking downloaded: %s", session_id)
             raise HTTPException(status_code=404, detail="Session not found")
         return updated
+
+    def record_file_downloaded(self, session_id: str, filename: str) -> None:
+        """Record per-file downloaded_at metadata for auditing."""
+        record = get_session_record(session_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        metadata = record.storage_metadata or {}
+        files_meta = metadata.get("files", {}) if metadata else {}
+        file_meta = files_meta.get(filename)
+        if not file_meta:
+            raise HTTPException(status_code=404, detail="Uploaded file not found")
+
+        file_meta["downloaded_at"] = self._format_timestamp(datetime.utcnow())
+        files_meta[filename] = file_meta
+        metadata["files"] = files_meta
+        update_storage_metadata(session_id, metadata)
+
+    def delete_sharepoint_file(self, session_id: str, filename: str, reason: str) -> bool:
+        """Delete a single SharePoint file and update storage metadata.
+
+        Returns True if deletion succeeded or file already deleted, False otherwise.
+        """
+        if self.sharepoint_service is None:
+            return False
+
+        record = get_session_record(session_id)
+        if record is None:
+            self.logger.warning("Attempted to delete file for missing session: %s", session_id)
+            return False
+
+        metadata = record.storage_metadata or {}
+        files_meta = metadata.get("files", {}) if metadata else {}
+        file_meta = files_meta.get(filename)
+        if not file_meta:
+            self.logger.warning("No metadata for file to delete: %s / %s", session_id, filename)
+            return False
+
+        if file_meta.get("deleted_at"):
+            # Already deleted
+            return True
+
+        item_id = file_meta.get("item_id")
+        if not item_id:
+            self.logger.warning("No item_id present for SharePoint file: %s / %s", session_id, filename)
+            return False
+
+        try:
+            self.sharepoint_service.delete_file(item_id)
+        except Exception as exc:
+            self.logger.exception("Failed to delete SharePoint file %s for session %s: %s", filename, session_id, exc)
+            return False
+
+        # on success update metadata
+        file_meta["deleted_at"] = self._format_timestamp(datetime.utcnow())
+        file_meta["deletion_reason"] = reason
+        file_meta["status"] = "deleted"
+        files_meta[filename] = file_meta
+        metadata["files"] = files_meta
+        try:
+            update_storage_metadata(session_id, metadata)
+        except Exception:
+            self.logger.exception("Failed to persist storage metadata after deletion for session %s", session_id)
+
+        return True
+
+    def delete_sharepoint_files(self, session_id: str, filenames: list[str], reason: str) -> dict[str, bool]:
+        """Delete multiple SharePoint files and return per-file success map."""
+        results: dict[str, bool] = {}
+        for fname in filenames:
+            try:
+                ok = self.delete_sharepoint_file(session_id, fname, reason)
+                results[fname] = ok
+            except Exception:
+                self.logger.exception("Unexpected error deleting SharePoint file %s for session %s", fname, session_id)
+                results[fname] = False
+        return results
+
+    def finalize_download_and_delete(self, session_id: str, filenames: list[str], reason: str) -> dict[str, bool]:
+        """Record downloaded_at for each file then attempt deletion from SharePoint.
+
+        This is intended to run as a background task after a successful response
+        has been streamed to the receiver.
+        """
+        results: dict[str, bool] = {}
+        for fname in filenames:
+            try:
+                try:
+                    self.record_file_downloaded(session_id, fname)
+                except Exception:
+                    # still attempt deletion even if recording downloaded_at failed
+                    self.logger.exception("Failed to record downloaded_at for %s in %s", fname, session_id)
+
+                ok = self.delete_sharepoint_file(session_id, fname, reason)
+                results[fname] = ok
+            except Exception:
+                self.logger.exception("Unexpected finalize error for %s in %s", fname, session_id)
+                results[fname] = False
+        return results
 
     def get_uploaded_file_path(self, session_id: str, filename: str | None = None) -> Path:
         """Return the uploaded file path for a completed session."""
@@ -318,8 +437,14 @@ class SessionService:
                 raise HTTPException(status_code=400, detail=f"File extension '{extension}' is blocked.")
 
             content_type = upload_file.content_type or "application/octet-stream"
-            if content_type not in settings.allowed_mime_types:
-                self.logger.warning("Rejected MIME type for session %s: %s", session_id, content_type)
+            normalized_content_type = content_type.split(";")[0].strip().lower()
+            if normalized_content_type not in settings.allowed_mime_types:
+                self.logger.warning(
+                    "Rejected MIME type for session %s: %s (normalized: %s)",
+                    session_id,
+                    content_type,
+                    normalized_content_type,
+                )
                 raise HTTPException(status_code=400, detail="File MIME type is not allowed.")
 
             filenames.append(filename)
@@ -334,8 +459,7 @@ class SessionService:
                     raise HTTPException(status_code=500, detail="SharePoint storage is not configured")
                 for upload_file in upload_files:
                     filename = self._sanitize_filename(upload_file.filename)
-                    file_bytes = await upload_file.read()
-                    total_bytes = len(file_bytes)
+                    total_bytes = self._get_upload_file_size(upload_file)
                     if total_bytes > max_size_bytes:
                         self.logger.warning("File too large for session %s: %d bytes", session_id, total_bytes)
                         raise HTTPException(
@@ -346,12 +470,13 @@ class SessionService:
                         self.logger.warning("Empty file upload for session %s", session_id)
                         raise HTTPException(status_code=400, detail="Uploaded files must not be empty.")
 
-                    item_info = self.sharepoint_service.upload_file(session_id, filename, file_bytes)
+                    item_info = self.sharepoint_service.upload_file(session_id, filename, upload_file)
                     sharepoint_metadata[filename] = {
                         "item_id": item_info["item_id"],
                         "web_url": item_info["web_url"],
                         "content_type": upload_file.content_type,
                         "size": total_bytes,
+                        "uploaded_at": self._format_timestamp(datetime.utcnow()),
                     }
                     self.logger.info("Session file uploaded to SharePoint for session %s: %s", session_id, filename)
             else:
@@ -406,12 +531,14 @@ class SessionService:
             raise HTTPException(status_code=500, detail="Unable to update session status")
 
         if settings.storage_backend.lower() == "sharepoint":
-            update_storage_metadata(session_id, {"backend": "sharepoint", "files": sharepoint_metadata})
+            existing_metadata = record.storage_metadata or {}
+            existing_metadata.update({"backend": "sharepoint", "files": sharepoint_metadata})
+            update_storage_metadata(session_id, existing_metadata)
 
         return updated, filenames
 
     def _sanitize_filename(self, filename: str | None) -> str:
-        """Normalize a filename while preserving the extension."""
+        """Normalize an uploaded filename and prevent path traversal."""
         if filename is None:
             raise HTTPException(status_code=400, detail="Each uploaded file must have a name.")
 
@@ -420,6 +547,33 @@ class SessionService:
         if not safe_name:
             raise HTTPException(status_code=400, detail="Each uploaded file must have a name.")
         return safe_name
+
+    def _get_upload_file_size(self, upload_file: UploadFile) -> int:
+        """Calculate the size of an incoming UploadFile without fully loading it."""
+        file_obj = upload_file.file
+        try:
+            current_position = file_obj.tell()
+            file_obj.seek(0, 2)
+            total_bytes = file_obj.tell()
+            file_obj.seek(current_position)
+            return total_bytes
+        except (AttributeError, OSError):
+            # Fallback to streaming count if the underlying file is not seekable.
+            total_bytes = 0
+            try:
+                file_obj.seek(0)
+            except Exception:
+                pass
+            while True:
+                chunk = file_obj.read(1024 * 1024)
+                if not chunk:
+                    break
+                total_bytes += len(chunk)
+            try:
+                file_obj.seek(0)
+            except Exception:
+                pass
+            return total_bytes
 
     def is_expired(self, record: SessionRecord) -> bool:
         """Return True when the session expiry timestamp is in the past."""

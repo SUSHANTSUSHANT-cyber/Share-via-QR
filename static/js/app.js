@@ -1,5 +1,5 @@
 const serverTiming = 700;
-const maxFileSize = 100 * 1024 * 1024;
+let maxFileSize = 100 * 1024 * 1024;
 const allowedExtensions = [
   ".pdf",
   ".docx",
@@ -11,6 +11,28 @@ const allowedExtensions = [
   ".jpg",
   ".jpeg",
   ".webp",
+  ".mp4",
+  ".mov",
+  ".webm",
+  ".avi",
+  ".mkv",
+];
+const allowedMimeTypes = [
+  "application/pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "text/plain",
+  "text/csv",
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "video/mp4",
+  "video/quicktime",
+  "video/webm",
+  "video/x-msvideo",
+  "video/x-matroska",
+  "application/octet-stream",
 ];
 
 function formatBytes(bytes) {
@@ -80,10 +102,17 @@ function setDashboardMessage(message, isError = false) {
 }
 
 async function createSession(employeeCode) {
+  const hostnameInput = document.getElementById("receiver-hostname");
+  const receiverHostname = hostnameInput?.value?.trim() || null;
+  const payload = { employee_code: employeeCode };
+  if (receiverHostname) {
+    payload.hostname = receiverHostname;
+  }
+
   const response = await fetch("/session/create", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ employee_code: employeeCode }),
+    body: JSON.stringify(payload),
   });
 
   if (!response.ok) {
@@ -98,12 +127,27 @@ function bindDashboard() {
   const form = document.getElementById("qr-form");
   const downloadButton = document.getElementById("download-file-button");
   const downloadAllButton = document.getElementById("download-all-button");
+  const receiverHostnameError = document.getElementById("receiver-hostname-error");
+  const receiverHostnameInput = document.getElementById("receiver-hostname");
   const downloadFileName = document.getElementById("download-file-name");
   const uploadedFilesList = document.getElementById("uploaded-files-list");
   let sessionId = null;
   let statusPoll = null;
 
   if (!form) return;
+
+  const hostnameError = receiverHostnameError?.value?.trim();
+  const generateButton = document.getElementById("generate-qr");
+  if (generateButton) {
+    generateButton.disabled = false;
+  }
+
+  if (hostnameError && hostnameError.toLowerCase() !== "none") {
+    setDashboardMessage(hostnameError, true);
+    if (generateButton) {
+      generateButton.disabled = true;
+    }
+  }
 
   function updateDownloadedFileStatus(status, filename) {
     if (status === "uploaded") {
@@ -319,6 +363,11 @@ function bindUploadPage() {
     expiryValue.textContent = formatTimestampToIST(expiryValue.textContent.trim());
   }
 
+  const maxFileSizeValue = document.getElementById("max-file-size-value")?.dataset.maxFileSize;
+  if (maxFileSizeValue) {
+    maxFileSize = Number(maxFileSizeValue) * 1024 * 1024;
+  }
+
   let selectedFiles = [];
 
   function refreshFileList() {
@@ -356,14 +405,23 @@ function bindUploadPage() {
 
     for (const file of selectedFiles) {
       const extension = file.name.substring(file.name.lastIndexOf(".")).toLowerCase();
-      if (!allowedExtensions.includes(extension)) {
+      const mimeType = (file.type || "application/octet-stream").split(";")[0].trim().toLowerCase();
+      if (!allowedExtensions.includes(extension) && !allowedMimeTypes.includes(mimeType)) {
+        console.log("FILE VALIDATION", {
+          name: file.name,
+          mimeType: file.type,
+          normalizedMimeType: mimeType,
+          extension,
+          allowedExtensions,
+          allowedMimeTypes,
+        });
         showUploadStatus("One or more files are invalid.", "error");
         if (uploadMessage) uploadMessage.textContent = `Invalid file type: ${file.name}`;
         return;
       }
       if (file.size > maxFileSize) {
         showUploadStatus("One or more files exceed the maximum size.", "error");
-        if (uploadMessage) uploadMessage.textContent = `File too large: ${file.name}`;
+        if (uploadMessage) uploadMessage.textContent = `File too large: ${file.name}. Maximum is ${formatBytes(maxFileSize)}.`;
         return;
       }
     }

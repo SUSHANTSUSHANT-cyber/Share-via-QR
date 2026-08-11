@@ -21,6 +21,7 @@ from routes.session import router as session_router
 from routes.status import router as status_router
 from routes.transfer import router as transfer_router
 from routes.upload import router as upload_router
+from services.cleanup_service import start_background_cleanup
 
 BASE_DIR = Path(__file__).resolve().parent
 TEMPLATES_DIR = BASE_DIR / "templates"
@@ -62,7 +63,17 @@ def startup_event() -> None:
         settings.database_path,
     )
     initialize_database()
+    # start periodic cleanup thread for expired SharePoint files
+    app.state.cleanup_stop_event = start_background_cleanup()
     logger.info("Application startup completed successfully.")
+
+
+@app.on_event("shutdown")
+def shutdown_event() -> None:
+    """Signal background cleanup to stop on application shutdown."""
+    stop_event = getattr(app.state, "cleanup_stop_event", None)
+    if stop_event is not None:
+        stop_event.set()
 
 
 if __name__ == "__main__":

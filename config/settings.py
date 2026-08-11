@@ -74,7 +74,7 @@ def build_settings() -> Settings:
         "server_url": os.getenv("SERVER_URL", "https://your-public-domain.example.com"),
         "database_path": os.getenv("DATABASE_PATH", str(BASE_DIR / "database.db")),
         "session_expiry_minutes": _as_int(os.getenv("SESSION_EXPIRY_MINUTES"), 1),
-        "max_file_size_mb": _as_int(os.getenv("MAX_FILE_SIZE_MB"), 100),
+        "max_file_size_mb": _as_int(os.getenv("MAX_FILE_SIZE_MB"), 200),
         "allowed_mime_types": _as_tuple(
             os.getenv("ALLOWED_MIME_TYPES"),
             (
@@ -87,6 +87,11 @@ def build_settings() -> Settings:
                 "image/png",
                 "image/jpeg",
                 "image/webp",
+                "video/mp4",
+                "video/quicktime",
+                "video/webm",
+                "video/x-msvideo",
+                "video/x-matroska",
                 "application/octet-stream",
             ),
         ),

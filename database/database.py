@@ -63,6 +63,7 @@ def initialize_database() -> None:
                     expires_at TEXT,
                     uploaded_at TEXT,
                     downloaded_at TEXT,
+                    hostname TEXT,
                     storage_metadata TEXT
                 )
                 """
@@ -73,6 +74,9 @@ def initialize_database() -> None:
             }
             if "storage_metadata" not in columns:
                 connection.execute("ALTER TABLE transfer_sessions ADD COLUMN storage_metadata TEXT")
+                columns.add("storage_metadata")
+            if "hostname" not in columns:
+                connection.execute("ALTER TABLE transfer_sessions ADD COLUMN hostname TEXT")
             connection.commit()
         logger.info("Database initialized at %s", database_path)
     except sqlite3.Error as exc:
@@ -87,6 +91,7 @@ def create_session(
     status: str = DEFAULT_SESSION_STATUS,
     created_at: str | None = None,
     expires_at: str | None = None,
+    hostname: str | None = None,
 ) -> SessionRecord | None:
     """Create a new transfer session record."""
     if created_at is None:
@@ -104,8 +109,9 @@ def create_session(
                     created_at,
                     expires_at,
                     uploaded_at,
-                    downloaded_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    downloaded_at,
+                    hostname
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     session_id,
@@ -116,6 +122,7 @@ def create_session(
                     expires_at,
                     None,
                     None,
+                    hostname,
                 ),
             )
             connection.commit()

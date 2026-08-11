@@ -17,7 +17,9 @@
         <label for="employee-code">Employee Code</label>
         <input id="employee-code" class="input-field" type="text" placeholder="Enter employee code" autocomplete="off" />
         <button id="generate-qr" class="primary-button" type="submit">Generate QR</button>
-        <p id="dashboard-message" class="validation-message"></p>
+        <input id="receiver-hostname" type="hidden" value="{{ receiver_hostname or '' }}" />
+        <input id="receiver-hostname-error" type="hidden" value="{{ hostname_error or '' }}" />
+        <p id="dashboard-message" class="validation-message">{{ hostname_error or '' }}</p>
       </form>
 
       <div class="preview-panel" id="qr-preview-panel">

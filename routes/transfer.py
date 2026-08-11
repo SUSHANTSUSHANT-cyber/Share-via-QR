@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import base64
 import logging
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Depends
 from fastapi.responses import HTMLResponse, Response
 
 from models.session import SessionCreateRequest
 from services.qr_service import QRService
 from services.session_service import SessionService
 
-router = APIRouter(prefix="/transfer", tags=["transfer"])
+from utils.security import require_receiver
+
+router = APIRouter(prefix="/transfer", tags=["transfer"], dependencies=[Depends(require_receiver)])
 service = SessionService()
 qr_service = QRService()
 logger = logging.getLogger("qr_transfer_system")

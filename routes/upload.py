@@ -6,6 +6,7 @@ import logging
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse
 
+from config.settings import settings
 from services.session_service import SessionService
 
 router = APIRouter(prefix="/upload", tags=["upload"])
@@ -32,6 +33,7 @@ async def upload_page(session_id: str, request: Request) -> HTMLResponse:
         context={
             "request": request,
             "session": record,
+            "max_file_size_mb": settings.max_file_size_mb,
         },
     )
 

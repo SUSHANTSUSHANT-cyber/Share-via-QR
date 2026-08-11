@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from utils.security import require_receiver
 
-router = APIRouter(prefix="/status", tags=["status"])
+router = APIRouter(prefix="/status", tags=["status"], dependencies=[Depends(require_receiver)])
 
 
 @router.get("", include_in_schema=False)

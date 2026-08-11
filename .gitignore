@@ -1,6 +1,7 @@
 __pycache__/
 *.pyc
 .env
+.vnev/
 uploads/*
 database.db
 .vscode/
