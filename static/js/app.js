@@ -125,12 +125,12 @@ async function createSession(employeeCode) {
 
 function bindDashboard() {
   const form = document.getElementById("qr-form");
-  const downloadButton = document.getElementById("download-file-button");
   const downloadAllButton = document.getElementById("download-all-button");
   const receiverHostnameError = document.getElementById("receiver-hostname-error");
   const receiverHostnameInput = document.getElementById("receiver-hostname");
-  const downloadFileName = document.getElementById("download-file-name");
   const uploadedFilesList = document.getElementById("uploaded-files-list");
+  const dashboardStatusBadge = document.getElementById("dashboard-status-badge");
+  const dashboardStatusText = document.getElementById("dashboard-status-text");
   let sessionId = null;
   let statusPoll = null;
 
@@ -142,6 +142,9 @@ function bindDashboard() {
     generateButton.disabled = false;
   }
 
+  // On initial load, mark the receiver progress as 'Create session' current
+  updateReceiverProgress(null);
+
   if (hostnameError && hostnameError.toLowerCase() !== "none") {
     setDashboardMessage(hostnameError, true);
     if (generateButton) {
@@ -149,18 +152,99 @@ function bindDashboard() {
     }
   }
 
-  function updateDownloadedFileStatus(status, filename) {
-    if (status === "uploaded") {
-      setElementText("dashboard-status", "File received");
-      if (downloadButton) downloadButton.disabled = false;
-      if (downloadAllButton) downloadAllButton.disabled = false;
-      if (downloadFileName) downloadFileName.textContent = filename ? `First file: ${filename}` : "Ready to download.";
-    } else {
-      setElementText("dashboard-status", "Waiting for file upload...");
-      if (downloadButton) downloadButton.disabled = true;
-      if (downloadAllButton) downloadAllButton.disabled = true;
-      if (downloadFileName) downloadFileName.textContent = "";
+  function updateReceiverProgress(status) {
+    const steps = Array.from(document.querySelectorAll("#receiver-progress-steps .progress-step"));
+    if (!steps.length) return;
+
+    // Clear all states first
+    steps.forEach((s) => s.classList.remove("progress-step--complete", "progress-step--current", "progress-step--future"));
+
+    // No status means initial landing on the receiver page: mark 'Create session' as current
+    if (!status) {
+      steps[0]?.classList.add("progress-step--current");
+      steps[1]?.classList.add("progress-step--future");
+      steps[2]?.classList.add("progress-step--future");
+      return;
     }
+
+    const normalized = status.toLowerCase();
+
+    if (["created", "waiting", "pending", "open"].includes(normalized)) {
+      // Session exists: create session completed, upload current
+      steps[0]?.classList.add("progress-step--complete");
+      steps[1]?.classList.add("progress-step--current");
+      steps[2]?.classList.add("progress-step--future");
+      return;
+    }
+
+    if (normalized === "uploaded") {
+      steps[0]?.classList.add("progress-step--complete");
+      steps[1]?.classList.add("progress-step--complete");
+      steps[2]?.classList.add("progress-step--current");
+      return;
+    }
+
+    if (normalized === "downloaded") {
+      steps.forEach((s) => s.classList.add("progress-step--complete"));
+      return;
+    }
+
+    if (normalized === "expired") {
+      steps[0]?.classList.add("progress-step--complete");
+      steps[1]?.classList.add("progress-step--future");
+      steps[2]?.classList.add("progress-step--future");
+      return;
+    }
+
+    // Fallback: mark first step current
+    steps[0]?.classList.add("progress-step--current");
+    steps[1]?.classList.add("progress-step--future");
+    steps[2]?.classList.add("progress-step--future");
+  }
+
+  function setStatusBadge(status) {
+    if (!dashboardStatusBadge || !dashboardStatusText) return;
+    const normalized = status?.toLowerCase() || "waiting";
+    const disableDownloads = normalized === "downloaded";
+    dashboardStatusBadge.className = "status-pill";
+    dashboardStatusText.textContent = "Waiting for file upload...";
+
+    if (["waiting", "created", "pending", "open"].includes(normalized)) {
+      dashboardStatusBadge.textContent = "WAITING";
+      dashboardStatusBadge.classList.add("status-pill--waiting");
+      dashboardStatusText.textContent = "Waiting for employee upload.";
+      downloadAllButton.disabled = true;
+    } else if (normalized === "uploaded") {
+      dashboardStatusBadge.textContent = "UPLOAD COMPLETE";
+      dashboardStatusBadge.classList.add("status-pill--success");
+      dashboardStatusText.textContent = "Files have been uploaded and are ready to download.";
+      downloadAllButton.disabled = false;
+    } else if (normalized === "downloaded") {
+      dashboardStatusBadge.textContent = "COMPLETE";
+      dashboardStatusBadge.classList.add("status-pill--success");
+      dashboardStatusText.textContent = "The session has been downloaded.";
+      downloadAllButton.disabled = true;
+    } else if (normalized === "expired") {
+      dashboardStatusBadge.textContent = "EXPIRED";
+      dashboardStatusBadge.classList.add("status-pill--error");
+      dashboardStatusText.textContent = "This session has expired.";
+      downloadAllButton.disabled = true;
+    } else {
+      dashboardStatusBadge.textContent = "ERROR";
+      dashboardStatusBadge.classList.add("status-pill--error");
+      dashboardStatusText.textContent = "The session is not available.";
+      downloadAllButton.disabled = true;
+    }
+
+    document.querySelectorAll(".download-file-button").forEach((button) => {
+      button.disabled = disableDownloads;
+    });
+
+    updateReceiverProgress(normalized);
+  }
+
+  function updateDownloadedFileStatus(status, filename) {
+    setStatusBadge(status);
   }
 
   async function fetchDownloadFilename(sessionIdToCheck) {
@@ -183,7 +267,8 @@ function bindDashboard() {
 
     if (!files?.length) {
       const emptyMessage = document.createElement("li");
-      emptyMessage.textContent = "No files uploaded yet.";
+      emptyMessage.className = "uploaded-file-empty";
+      emptyMessage.textContent = "No files have been uploaded yet.";
       uploadedFilesList.appendChild(emptyMessage);
       return;
     }
@@ -191,16 +276,36 @@ function bindDashboard() {
     files.forEach((file) => {
       const item = document.createElement("li");
       item.className = "uploaded-file-item";
+      const metaLabel = file.content_type ? `${file.content_type}` : "File";
       item.innerHTML = `
-        <strong>${file.filename}</strong>
-        <span>${formatBytes(file.size)}</span>
-        <button type="button" class="small-button" data-filename="${encodeURIComponent(file.filename)}">Download</button>
+        <div class="uploaded-file-meta">
+          <div>
+            <strong>${file.filename}</strong>
+            <p>${metaLabel}</p>
+          </div>
+          <div>
+            <span>${formatBytes(file.size)}</span>
+            <button type="button" class="download-file-button" data-filename="${encodeURIComponent(file.filename)}">Download</button>
+          </div>
+        </div>
       `;
       const button = item.querySelector("button");
       button?.addEventListener("click", () => {
         if (!sessionId) return;
+        button.disabled = true;
+        if (downloadAllButton) {
+          downloadAllButton.disabled = true;
+        }
         const filename = decodeURIComponent(button.dataset.filename || "");
-        window.location.href = `/download/${sessionId}?filename=${filename}`;
+        const url = `/download/${sessionId}?filename=${filename}`;
+        try {
+          window.open(url, "_blank");
+        } catch (e) {
+          window.location.href = url;
+        }
+        if (!statusPoll) {
+          statusPoll = setInterval(pollSessionStatus, 3000);
+        }
       });
       uploadedFilesList.appendChild(item);
     });
@@ -219,10 +324,10 @@ function bindDashboard() {
       }
 
       const session = await response.json();
-      if (session.status === "uploaded" || session.status === "downloaded") {
-        await renderUploadedFiles(session.files);
-        const filename = session.files?.[0]?.filename ?? null;
-        updateDownloadedFileStatus("uploaded", filename);
+      await renderUploadedFiles(session.files);
+      const status = session.status || "waiting";
+      updateDownloadedFileStatus(status, session.files?.[0]?.filename ?? null);
+      if (status === "downloaded" || status === "expired") {
         clearInterval(statusPoll);
         statusPoll = null;
       }
@@ -231,14 +336,32 @@ function bindDashboard() {
     }
   }
 
-  downloadButton?.addEventListener("click", () => {
-    if (!sessionId) return;
-    window.location.href = `/download/${sessionId}`;
-  });
-
   downloadAllButton?.addEventListener("click", () => {
     if (!sessionId) return;
-    window.location.href = `/download/${sessionId}?archive=true`;
+    const label = downloadAllButton.querySelector(".button-label-text");
+    downloadAllButton.disabled = true;
+    document.querySelectorAll(".download-file-button").forEach((button) => {
+      button.disabled = true;
+    });
+    if (label) label.textContent = "Preparing download...";
+
+    const url = `/download/${sessionId}?archive=true`;
+    // Open the archive in a new tab so the current page can continue polling
+    try {
+      window.open(url, "_blank");
+    } catch (e) {
+      // fallback to navigation if popup blocked
+      window.location.href = url;
+    }
+
+    // Ensure polling is active so we pick up the server marking the session as downloaded
+    if (!statusPoll) {
+      statusPoll = setInterval(pollSessionStatus, 3000);
+    }
+
+    setTimeout(() => {
+      if (label) label.textContent = "Download All Files";
+    }, 2000);
   });
 
   form.addEventListener("submit", async (event) => {
@@ -358,6 +481,7 @@ function bindUploadPage() {
 
   if (!fileInput || !uploadButton || !cancelButton || !selectedFilesList) return;
 
+  const stepperItems = Array.from(document.querySelectorAll(".stepper-item"));
   const expiryValue = document.getElementById("session-expiry-value");
   if (expiryValue?.textContent) {
     expiryValue.textContent = formatTimestampToIST(expiryValue.textContent.trim());
@@ -369,6 +493,30 @@ function bindUploadPage() {
   }
 
   let selectedFiles = [];
+  let uploadState = "initial";
+
+  function updateStepState(state) {
+    uploadState = state;
+    stepperItems.forEach((item) => {
+      const step = Number(item.dataset.step);
+      item.classList.remove("stepper-item--active", "stepper-item--complete", "stepper-item--future");
+      if (state === "initial") {
+        item.classList.add(step === 1 ? "stepper-item--active" : "stepper-item--future");
+      } else if (state === "ready") {
+        if (step === 1) item.classList.add("stepper-item--complete");
+        else if (step === 2) item.classList.add("stepper-item--active");
+        else item.classList.add("stepper-item--future");
+      } else if (state === "uploading") {
+        if (step < 2) item.classList.add("stepper-item--complete");
+        else if (step === 2) item.classList.add("stepper-item--active");
+        else item.classList.add("stepper-item--future");
+      } else if (state === "complete") {
+        item.classList.add("stepper-item--complete");
+      }
+    });
+  }
+
+  updateStepState("initial");
 
   function refreshFileList() {
     selectedFilesList.innerHTML = "";
@@ -433,6 +581,7 @@ function bindUploadPage() {
     const totalSize = selectedFiles.reduce((sum, file) => sum + file.size, 0);
     setElementText("selected-file-size", formatBytes(totalSize));
     updateProgress(25);
+    updateStepState("ready");
   }
 
   fileInput.addEventListener("change", () => {
@@ -455,6 +604,7 @@ function bindUploadPage() {
     showUploadStatus("Uploading files...");
     if (uploadMessage) uploadMessage.textContent = "";
     updateProgress(5);
+    updateStepState("uploading");
 
     try {
       const result = await uploadFilesToServer(sessionId, selectedFiles);
@@ -466,12 +616,14 @@ function bindUploadPage() {
       refreshFileList();
       uploadButton.disabled = true;
       cancelButton.disabled = false;
+      updateStepState("complete");
     } catch (error) {
       showUploadStatus(error.message || "Upload failed.", "error");
       if (uploadMessage) uploadMessage.textContent = error.message;
       uploadButton.disabled = false;
       cancelButton.disabled = false;
       updateProgress(0);
+      updateStepState("ready");
     }
   });
 

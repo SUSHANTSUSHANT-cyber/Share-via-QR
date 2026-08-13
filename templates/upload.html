@@ -4,61 +4,122 @@
 {% block title %}Upload File · AISIN Secure File Transfer{% endblock %}
 
 {% block content %}
-  <section class="upload-shell">
-    <div class="upload-panel">
-      <div class="card upload-card">
-        <p class="eyebrow">Upload File</p>
-        <h2>AISIN Secure File Transfer</h2>
-        <p class="hero-copy">Select a file and upload it to the secure transfer session. The backend will store the file temporarily and update session status.</p>
-
-        <div class="input-group">
-          <label for="file-input">Choose files</label>
-          <input class="file-input" type="file" id="file-input" name="files" multiple accept=".pdf,.docx,.xlsx,.pptx,.txt,.csv,.png,.jpg,.jpeg,.webp,.mp4,.mov,.webm,.avi,.mkv,video/mp4,video/quicktime,video/webm,video/x-msvideo,video/x-matroska" />
+  <section class="upload-layout">
+    <div class="upload-main">
+      <div class="upload-panel">
+        <div class="card-title">
+          <p class="eyebrow">Upload files</p>
+          <h2>Choose files for this session</h2>
         </div>
 
-        <div class="upload-file-list" id="upload-file-list">
-          <p class="preview-label">Selected files</p>
-          <ul id="selected-files"></ul>
-        </div>
+        <div class="section-panel">
+          <div class="input-group">
+            <label for="file-input">Choose files</label>
+            <input class="file-input" type="file" id="file-input" name="files" multiple accept=".pdf,.docx,.xlsx,.pptx,.txt,.csv,.png,.jpg,.jpeg,.webp,.mp4,.mov,.webm,.avi,.mkv,video/mp4,video/quicktime,video/webm,video/x-msvideo,video/x-matroska" />
+          </div>
 
-        <div class="action-row action-row--upload">
-          <button id="upload-button" class="primary-button" type="button" disabled>Upload Selected Files</button>
-          <button id="cancel-button" class="secondary-button" type="button">Clear Selection</button>
-        </div>
+          <div class="file-list">
+            <p class="preview-label">Selected files</p>
+            <ul id="selected-files"></ul>
+          </div>
 
-        <div class="status-banner" id="upload-status-banner">
-          <strong>Upload status</strong>
-          <p id="upload-status">Waiting for file selection</p>
-        </div>
+          <div class="action-row action-row--upload">
+            <button id="upload-button" class="primary-button" type="button" disabled>
+              <span class="button-label">
+                <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path fill="currentColor" d="M5 20h14v-2H5v2Zm7-18L5.33 9h3.84v4h4.66V9h3.84L12 2Z"/></svg>
+                Upload Selected Files
+              </span>
+            </button>
+            <button id="cancel-button" class="secondary-button" type="button">Clear Selection</button>
+          </div>
 
-        <div class="progress-track" aria-hidden="true">
-          <span class="progress-bar" id="upload-progress"></span>
-        </div>
+          <div class="status-banner" id="upload-status-banner">
+            <strong>Upload status</strong>
+            <p id="upload-status">Waiting for file selection</p>
+          </div>
 
-        <p id="upload-message" class="validation-message"></p>
+          <div class="progress-track" aria-hidden="true">
+            <span class="progress-bar" id="upload-progress"></span>
+          </div>
+
+          <p id="upload-message" class="validation-message"></p>
+        </div>
       </div>
 
-      <div class="detail-grid upload-details">
-        <div class="detail-card">
-          <strong>Session ID</strong>
-          <p id="session-id-value">{{ session.session_id }}</p>
+      <div class="stepper-card">
+        <div class="card-title">
+          <p class="eyebrow">Sender workflow</p>
+          <h1>Upload files to the secure session</h1>
+          <p class="mini-copy">Complete the steps below to submit files for the receiver.</p>
         </div>
-        <div class="detail-card">
-          <strong>Expiry</strong>
-          <p id="session-expiry-value">{{ session.expires_at }}</p>
+
+        <ol class="stepper" id="upload-stepper">
+          <li class="stepper-item stepper-item--active" data-step="1">
+            <span class="stepper-marker">1</span>
+            <div>
+              <p class="stepper-item-title">Select files</p>
+              <p class="stepper-item-copy">Choose the files you want to upload.</p>
+            </div>
+          </li>
+          <li class="stepper-item stepper-item--future" data-step="2">
+            <span class="stepper-marker">2</span>
+            <div>
+              <p class="stepper-item-title">Upload files</p>
+              <p class="stepper-item-copy">Send the selected files to the secure session.</p>
+            </div>
+          </li>
+          <li class="stepper-item stepper-item--future" data-step="3">
+            <span class="stepper-marker">3</span>
+            <div>
+              <p class="stepper-item-title">Complete</p>
+              <p class="stepper-item-copy">Confirm upload success and wait for receiver download.</p>
+            </div>
+          </li>
+        </ol>
+      </div>
+
+      <div class="instruction-card">
+        <div class="card-title">
+          <p class="eyebrow">Instructions</p>
+          <h2>How to complete this upload</h2>
         </div>
-        <div class="detail-card">
-          <strong>Max file size</strong>
-          <p>{{ max_file_size_mb }} MB</p>
+
+        <ol class="instruction-list">
+          <li>Choose one or more files and check the selection.</li>
+          <li>Tap Upload Selected Files to send your data to the session.</li>
+          <li>Wait until the receiver downloads the files before closing this page.</li>
+        </ol>
+      </div>
+
+      <div class="detail-panel">
+        <div class="card-title">
+          <p class="eyebrow">Session details</p>
+          <h2>Current transfer state</h2>
         </div>
-        <div class="detail-card">
-          <strong>Selected File</strong>
-          <p id="selected-file-name">None</p>
+
+        <div class="detail-summary">
+          <div class="detail-card">
+            <strong>Session ID</strong>
+            <p id="session-id-value">{{ session.session_id }}</p>
+          </div>
+          <div class="detail-card">
+            <strong>Expiry</strong>
+            <p id="session-expiry-value">{{ session.expires_at }}</p>
+          </div>
+          <div class="detail-card">
+            <strong>Allowed size</strong>
+            <p>{{ max_file_size_mb }} MB</p>
+          </div>
+          <div class="detail-card">
+            <strong>Selected file</strong>
+            <p id="selected-file-name">None</p>
+          </div>
+          <div class="detail-card">
+            <strong>Selected size</strong>
+            <p id="selected-file-size">—</p>
+          </div>
         </div>
-        <div class="detail-card">
-          <strong>File Size</strong>
-          <p id="selected-file-size">—</p>
-        </div>
+
         <span id="max-file-size-value" data-max-file-size="{{ max_file_size_mb }}" hidden></span>
       </div>
     </div>

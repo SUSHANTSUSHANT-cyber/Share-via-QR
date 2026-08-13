@@ -43,7 +43,20 @@ async def home(request: Request) -> HTMLResponse:
 
 @router.get("/receiver", response_class=HTMLResponse)
 async def receiver(request: Request, hostname: str | None = None) -> HTMLResponse:
-    """Render the receiver page with an optional hostname for audit metadata."""
+    """Render the receiver page with a required hostname for audit metadata."""
+    if hostname is None:
+        hostname_error = "Receiver hostname is required. Access via direct IP or without hostname is blocked."
+        return request.app.state.templates.TemplateResponse(
+            request=request,
+            name="index.html",
+            context={
+                "request": request,
+                "receiver_hostname": "",
+                "hostname_error": hostname_error,
+            },
+            status_code=400,
+        )
+
     receiver_hostname, hostname_error = _validate_receiver_hostname(hostname)
     return request.app.state.templates.TemplateResponse(
         request=request,

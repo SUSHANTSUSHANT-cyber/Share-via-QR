@@ -19,7 +19,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 ENV_FILE = BASE_DIR / ".env"
 
 if ENV_FILE.exists():
-    load_dotenv(ENV_FILE)
+    load_dotenv(ENV_FILE, override=True)
 
 logger = logging.getLogger("qr_transfer_system")
 

@@ -253,7 +253,12 @@ def list_active_sessions() -> list[SessionRecord]:
                 "SELECT * FROM transfer_sessions WHERE status != ? ORDER BY created_at",
                 ("expired",),
             ).fetchall()
-        return [SessionRecord.model_validate(dict(row)) for row in rows]
+        records: list[SessionRecord] = []
+        for row in rows:
+            data = dict(row)
+            data["storage_metadata"] = _deserialize_storage_metadata(data.get("storage_metadata"))
+            records.append(SessionRecord.model_validate(data))
+        return records
     except sqlite3.Error as exc:
         logger.exception("Failed to list active sessions: %s", exc)
         raise

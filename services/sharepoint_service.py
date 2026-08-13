@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import requests
+from fastapi import UploadFile
 
 from config.settings import settings
 from services.graph_service import GraphService
@@ -44,13 +45,13 @@ class SharePointService:
         create_response.raise_for_status()
         return create_response.json()["id"]
 
-    def _get_folder_id(self, session_id: str) -> str:
+    def _get_folder_id(self, folder_name: str) -> str:
         documents_folder_id = self._ensure_folder("root", "Documents")
-        return self._ensure_folder(documents_folder_id, session_id)
+        return self._ensure_folder(documents_folder_id, folder_name)
 
-    def upload_file(self, session_id: str, filename: str, upload_file: UploadFile) -> dict[str, str]:
-        """Upload a file into Documents/<session_id>/<filename> on SharePoint using a Graph upload session."""
-        folder_id = self._get_folder_id(session_id)
+    def upload_file(self, folder_name: str, filename: str, upload_file: UploadFile) -> dict[str, str]:
+        """Upload a file into Documents/<folder_name>/<filename> on SharePoint using a Graph upload session."""
+        folder_id = self._get_folder_id(folder_name)
         upload_session_url = (
             f"https://graph.microsoft.com/v1.0/drives/{self.drive_id}/items/{folder_id}:/{filename}:/createUploadSession"
         )

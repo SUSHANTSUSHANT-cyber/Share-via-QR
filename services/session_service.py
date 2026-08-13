@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -52,7 +53,7 @@ class SessionService:
         expires_at = self._format_timestamp(
             datetime.utcnow() + timedelta(minutes=settings.session_expiry_minutes)
         )
-        folder_name = f"session_{session_id}"
+        folder_name = self._make_folder_name(session_id, request.hostname)
 
         try:
             record = create_session_record(
@@ -157,6 +158,20 @@ class SessionService:
     def generate_session_id(self) -> str:
         """Generate a unique session identifier."""
         return str(uuid4())
+
+    def _make_folder_name(self, session_id: str, hostname: str | None) -> str:
+        """Build a safe SharePoint folder name that includes hostname when available."""
+        base_name = f"session_{session_id}"
+        if not hostname:
+            return base_name
+
+        safe_hostname = re.sub(r"[^A-Za-z0-9 _\-]", "_", hostname.strip())
+        safe_hostname = re.sub(r"\s+", "_", safe_hostname)
+        safe_hostname = safe_hostname.strip("_ ")
+        if not safe_hostname:
+            return base_name
+
+        return f"{safe_hostname}_{session_id}"
 
     def calculate_expiry(self, created_at: datetime) -> datetime:
         """Calculate the expiry timestamp for a session."""
@@ -470,7 +485,7 @@ class SessionService:
                         self.logger.warning("Empty file upload for session %s", session_id)
                         raise HTTPException(status_code=400, detail="Uploaded files must not be empty.")
 
-                    item_info = self.sharepoint_service.upload_file(session_id, filename, upload_file)
+                    item_info = self.sharepoint_service.upload_file(record.folder_name or session_id, filename, upload_file)
                     sharepoint_metadata[filename] = {
                         "item_id": item_info["item_id"],
                         "web_url": item_info["web_url"],

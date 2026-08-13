@@ -1,36 +1,35 @@
 {% set page = "dashboard" %}
 {% extends "base.html" %}
 
-{% block title %}Corporate Transfer Dashboard · AISIN Secure File Transfer{% endblock %}
+{% block title %}Receive File · AISIN Secure File Transfer{% endblock %}
 
 {% block content %}
-  <section class="dashboard-grid">
-    <div class="card dashboard-card">
-      <div class="card-header">
-        <div>
-          <p class="eyebrow">Receive File</p>
-          <h2>Generate a QR code for secure upload</h2>
+  <section class="dashboard-layout">
+    <div class="dashboard-column">
+      <div class="panel-card">
+        <div class="card-title">
+          <p class="eyebrow">Receive file</p>
+          <h1>Generate a secure upload QR</h1>
+          <p class="mini-copy">Enter the employee code and share the QR with your sender.</p>
         </div>
-      </div>
 
-      <form class="dashboard-form" id="qr-form">
-        <label for="employee-code">Employee Code</label>
-        <input id="employee-code" class="input-field" type="text" placeholder="Enter employee code" autocomplete="off" />
-        <button id="generate-qr" class="primary-button" type="submit">Generate QR</button>
-        <input id="receiver-hostname" type="hidden" value="{{ receiver_hostname or '' }}" />
-        <input id="receiver-hostname-error" type="hidden" value="{{ hostname_error or '' }}" />
-        <p id="dashboard-message" class="validation-message">{{ hostname_error or '' }}</p>
-      </form>
-
-      <div class="preview-panel" id="qr-preview-panel">
-        <div class="preview-card">
-          <p class="preview-label">QR Preview</p>
-          <div class="preview-placeholder" id="qr-preview">
-            <p>No QR generated yet</p>
+        <form class="form-panel" id="qr-form">
+          <label for="employee-code">Employee Code</label>
+          <div class="field-row">
+            <input id="employee-code" class="input-field" type="text" placeholder="Enter employee code" autocomplete="off" />
+            <button id="generate-qr" class="primary-button" type="submit">
+              <span class="button-label">
+                <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path fill="currentColor" d="M5 13h4v4H5v-4Zm6 0h4v4h-4v-4Zm-6-6h4v4H5V7Zm6 0h4v4h-4V7Zm6 0h4v4h-4V7Zm0 6h4v4h-4v-4Z"/></svg>
+                Generate QR
+              </span>
+            </button>
           </div>
-        </div>
+          <input id="receiver-hostname" type="hidden" value="{{ receiver_hostname or '' }}" />
+          <input id="receiver-hostname-error" type="hidden" value="{{ hostname_error or '' }}" />
+          <p id="dashboard-message" class="validation-message">{{ hostname_error or '' }}</p>
+        </form>
 
-        <div class="session-summary">
+        <div class="detail-summary">
           <div class="detail-card">
             <strong>Session ID</strong>
             <p id="dashboard-session-id">—</p>
@@ -39,44 +38,76 @@
             <strong>Expiry</strong>
             <p id="dashboard-expiry">—</p>
           </div>
-          <div class="detail-card">
-            <strong>Status</strong>
-            <p id="dashboard-status">Waiting for file upload...</p>
+        </div>
+      </div>
+
+      <div class="panel-card">
+        <div class="section-heading">
+          <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path fill="currentColor" d="M6 3h12v2H6V3Zm0 16h12v2H6v-2Zm3-8h6v2H9v-2Zm0-4h6v2H9V7Zm0 8h6v2H9v-2Z"/></svg>
+          <div>
+            <p class="eyebrow">Scan QR code</p>
+            <h2>Scan the QR code with your personal device</h2>
+          </div>
+        </div>
+
+        <div class="section-panel">
+          <div class="preview-placeholder" id="qr-preview">
+            <p>No QR generated yet</p>
           </div>
         </div>
       </div>
     </div>
 
-    <div class="card dashboard-card">
-      <div class="card-header">
-        <div>
-          <p class="eyebrow">Transfer Status</p>
-          <h2>Session information</h2>
+    <div class="dashboard-column">
+      <div class="instruction-card receiver-instructions">
+        <div class="card-title">
+          <p class="eyebrow">Instructions</p>
+          <h2>Session progress</h2>
         </div>
+
+        <ol class="progress-steps" id="receiver-progress-steps">
+          <li class="progress-step progress-step--complete" data-step="1">
+            <span class="progress-marker">1</span>
+            <div>
+              <strong>Create session</strong>
+              <p>Generate the QR and share it with your sender.</p>
+            </div>
+          </li>
+          <li class="progress-step progress-step--current" data-step="2">
+            <span class="progress-marker">2</span>
+            <div>
+              <strong>Upload files</strong>
+              <p>Wait while the sender uploads files to this session.</p>
+            </div>
+          </li>
+          <li class="progress-step progress-step--future" data-step="3">
+            <span class="progress-marker">3</span>
+            <div>
+              <strong>Download files</strong>
+              <p>Download files once upload is complete.</p>
+            </div>
+          </li>
+        </ol>
       </div>
 
-      <div class="detail-grid">
-        <div class="info-card info-card--highlight">
-          <strong>Instructions</strong>
-          <p>Generate a QR code, then ask the employee to scan it and upload files in the browser.</p>
-        </div>
-        <div class="info-card info-card--ready">
-          <strong>Session status</strong>
-          <p id="dashboard-status">Waiting for upload</p>
-        </div>
-        <div class="info-card info-card--actions">
-          <strong>Download ready</strong>
-          <div class="download-actions">
-            <button id="download-file-button" class="primary-button" type="button" disabled>Download First File</button>
-            <button id="download-all-button" class="secondary-button" type="button" disabled>Download All Files</button>
+      <div class="panel-card">
+        <div class="status-panel">
+          <div class="status-pill status-pill--waiting" id="dashboard-status-badge">WAITING</div>
+          <p id="dashboard-status-text">Waiting for file upload...</p>
+          <div class="warning-card">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2L1 21h22L12 2Zm0 6.75c.69 0 1.25.56 1.25 1.25v3.5c0 .69-.56 1.25-1.25 1.25s-1.25-.56-1.25-1.25v-3.5c0-.69.56-1.25 1.25-1.25Zm0 10.5c-.69 0-1.25-.56-1.25-1.25s.56-1.25 1.25-1.25 1.25.56 1.25 1.25-.56 1.25-1.25 1.25Z"/></svg>
+            <span>Files will be lost if I reload the page or generate a new session/QR. Download all required files before reloading or generating a new session.</span>
           </div>
-          <p id="download-file-name" class="validation-message"></p>
+          <button id="download-all-button" class="primary-button" type="button" disabled>
+            <span class="button-label">
+              <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path fill="currentColor" d="M5 20h14v-2H5v2Zm7-18L5.33 9h3.84v4h4.66V9h3.84L12 2Z"/></svg>
+              <span class="button-label-text">Download All Files</span>
+            </span>
+          </button>
         </div>
-      </div>
 
-      <div class="recent-card">
-        <p class="preview-label">Uploaded files</p>
-        <div class="recent-placeholder">
+        <div class="file-list">
+          <p class="preview-label">Uploaded files</p>
           <ul id="uploaded-files-list"></ul>
         </div>
       </div>
