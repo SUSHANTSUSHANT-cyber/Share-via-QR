@@ -9,7 +9,15 @@
   <body data-page="{{ page | default('') }}">
     <div class="page-shell">
       <header class="brand-bar">
-        <div>
+        <img
+          class="brand-logo"
+          src="/static/images/aisin_logo.jpg"
+          alt="AISIN – We Touch the Future"
+          width="200"
+          height="90"
+          decoding="async"
+        />
+        <div class="brand-copy">
           <p class="brand-name">AISIN Secure File Transfer</p>
           <p class="brand-subtitle">Secure enterprise file transfer for corporate and mobile workflows</p>
         </div>
@@ -18,7 +26,7 @@
       <main class="page-content">{% block content %}{% endblock %}</main>
 
       <footer class="footer">
-        <p>Secure enterprise transfer powered by AISIN</p>
+        <p>Secure enterprise transfer powered by AISIN Dx IT Team</p>
       </footer>
     </div>
     <script type="module" src="/static/js/app.js" defer></script>
