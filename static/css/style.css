@@ -735,6 +735,30 @@ h1 {
   color: #5a6f95;
 }
 
+.selected-file-item .remove-file-button {
+  background: #fff4f4;
+  color: #a52b2b;
+  width: auto;
+  flex: 0 0 auto;
+}
+
+.selected-file-item .remove-file-button:hover {
+  background: #ffe7e7;
+}
+
+.selected-file-meta {
+  flex-wrap: nowrap;
+}
+
+.selected-file-meta > div {
+  min-width: 0;
+  flex: 1;
+}
+
+.selected-file-name {
+  overflow-wrap: anywhere;
+}
+
 .download-file-button {
   border: none;
   border-radius: 999px;

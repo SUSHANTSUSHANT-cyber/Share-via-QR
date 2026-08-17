@@ -157,20 +157,24 @@ function bindDashboard() {
     const steps = Array.from(document.querySelectorAll("#receiver-progress-steps .progress-step"));
     if (!steps.length) return;
 
-    // Clear all states first
-    steps.forEach((s) => s.classList.remove("progress-step--complete", "progress-step--current", "progress-step--future"));
-
-    // No status means initial landing on the receiver page: mark 'Create session' as current
-    if (!status) {
+    // Before a session exists, mark "Create session" as current. Once one has
+    // been created, only a known session state may change the workflow.
+    if (!status && !sessionId) {
+      steps.forEach((s) => s.classList.remove("progress-step--complete", "progress-step--current", "progress-step--future"));
       steps[0]?.classList.add("progress-step--current");
       steps[1]?.classList.add("progress-step--future");
       steps[2]?.classList.add("progress-step--future");
       return;
     }
 
-    const normalized = status.toLowerCase();
+    const normalized = (status || "created").toLowerCase();
+    if (!["created", "waiting", "pending", "open", "uploading", "uploaded", "downloaded", "expired", "failed"].includes(normalized)) {
+      return;
+    }
 
-    if (["created", "waiting", "pending", "open"].includes(normalized)) {
+    steps.forEach((s) => s.classList.remove("progress-step--complete", "progress-step--current", "progress-step--future"));
+
+    if (["created", "waiting", "pending", "open", "uploading", "failed"].includes(normalized)) {
       // Session exists: create session completed, upload current
       steps[0]?.classList.add("progress-step--complete");
       steps[1]?.classList.add("progress-step--current");
@@ -197,10 +201,6 @@ function bindDashboard() {
       return;
     }
 
-    // Fallback: mark first step current
-    steps[0]?.classList.add("progress-step--current");
-    steps[1]?.classList.add("progress-step--future");
-    steps[2]?.classList.add("progress-step--future");
   }
 
   function setStatusBadge(status) {
@@ -442,23 +442,29 @@ function getUploadSessionId() {
 
 function buildFileListItem(file, index) {
   const listItem = document.createElement("li");
-  listItem.className = "selected-file-item";
+  listItem.className = "uploaded-file-item selected-file-item";
   listItem.dataset.index = String(index);
 
-  const nameSpan = document.createElement("span");
-  nameSpan.className = "selected-file-name";
-  nameSpan.textContent = file.name;
+  const fileMeta = document.createElement("div");
+  fileMeta.className = "uploaded-file-meta selected-file-meta";
 
-  const sizeSpan = document.createElement("span");
-  sizeSpan.className = "selected-file-size";
-  sizeSpan.textContent = formatBytes(file.size);
+  const fileDetails = document.createElement("div");
+  const name = document.createElement("strong");
+  name.className = "selected-file-name";
+  name.textContent = file.name;
+
+  const size = document.createElement("p");
+  size.className = "selected-file-size";
+  size.textContent = formatBytes(file.size);
+  fileDetails.append(name, size);
 
   const removeButton = document.createElement("button");
   removeButton.type = "button";
-  removeButton.className = "remove-file-button";
+  removeButton.className = "download-file-button remove-file-button";
   removeButton.textContent = "Remove";
 
-  listItem.append(nameSpan, sizeSpan, removeButton);
+  fileMeta.append(fileDetails, removeButton);
+  listItem.append(fileMeta);
   return listItem;
 }
 
