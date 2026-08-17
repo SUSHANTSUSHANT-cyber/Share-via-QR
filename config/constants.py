@@ -12,7 +12,9 @@ DEFAULT_PORT = 9000
 DEFAULT_SERVER_URL = "https://your-public-domain.example.com"
 
 STATUS_CREATED = "created"
+STATUS_UPLOADING = "uploading"
 STATUS_UPLOADED = "uploaded"
+STATUS_FAILED = "failed"
 STATUS_DOWNLOADED = "downloaded"
 STATUS_EXPIRED = "expired"
 DEFAULT_SESSION_STATUS = STATUS_CREATED

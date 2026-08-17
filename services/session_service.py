@@ -12,7 +12,14 @@ from uuid import uuid4
 from fastapi import HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 
-from config.constants import STATUS_CREATED, STATUS_DOWNLOADED, STATUS_EXPIRED, STATUS_UPLOADED
+from config.constants import (
+    STATUS_CREATED,
+    STATUS_DOWNLOADED,
+    STATUS_EXPIRED,
+    STATUS_FAILED,
+    STATUS_UPLOADED,
+    STATUS_UPLOADING,
+)
 from config.settings import settings
 from database.database import create_session as create_session_record
 from database.database import update_storage_metadata
@@ -20,7 +27,7 @@ from database.database import delete_session as delete_session_record
 from database.database import get_session as get_session_record
 from database.database import mark_downloaded as mark_session_downloaded
 from database.database import mark_uploaded as mark_session_uploaded
-from database.database import update_storage_metadata
+from database.database import update_session_status
 from models.session import SessionCreateRequest, SessionFile, SessionRecord, SessionResponse
 from services.sharepoint_service import SharePointService
 
@@ -466,34 +473,48 @@ class SessionService:
 
         max_size_bytes = settings.max_file_size_mb * 1024 * 1024
         saved_paths: list[Path] = []
-        sharepoint_metadata: dict[str, object] = {}
+        staged_metadata: dict[str, dict[str, object]] = {}
 
         try:
             if settings.storage_backend.lower() == "sharepoint":
                 if self.sharepoint_service is None:
                     raise HTTPException(status_code=500, detail="SharePoint storage is not configured")
+
+                staging_root = Path("uploads").resolve() / ".staging"
+                staging_dir = (staging_root / session_id).resolve()
+                if not staging_dir.is_relative_to(staging_root):
+                    raise HTTPException(status_code=400, detail="Invalid upload session")
+                staging_dir.mkdir(parents=True, exist_ok=True)
+
                 for upload_file in upload_files:
                     filename = self._sanitize_filename(upload_file.filename)
-                    total_bytes = self._get_upload_file_size(upload_file)
-                    if total_bytes > max_size_bytes:
-                        self.logger.warning("File too large for session %s: %d bytes", session_id, total_bytes)
-                        raise HTTPException(
-                            status_code=413,
-                            detail=f"File size exceeds maximum of {settings.max_file_size_mb} MB.",
-                        )
+                    target_path = (staging_dir / filename).resolve()
+                    if not target_path.is_relative_to(staging_dir):
+                        raise HTTPException(status_code=400, detail="Invalid filename")
+                    saved_paths.append(target_path)
+                    total_bytes = 0
+                    with target_path.open("wb") as destination:
+                        while True:
+                            chunk = await upload_file.read(1024 * 1024)
+                            if not chunk:
+                                break
+                            total_bytes += len(chunk)
+                            if total_bytes > max_size_bytes:
+                                self.logger.warning("File too large for session %s: %d bytes", session_id, total_bytes)
+                                raise HTTPException(
+                                    status_code=413,
+                                    detail=f"File size exceeds maximum of {settings.max_file_size_mb} MB.",
+                                )
+                            destination.write(chunk)
+
                     if total_bytes == 0:
                         self.logger.warning("Empty file upload for session %s", session_id)
                         raise HTTPException(status_code=400, detail="Uploaded files must not be empty.")
-
-                    item_info = self.sharepoint_service.upload_file(record.folder_name or session_id, filename, upload_file)
-                    sharepoint_metadata[filename] = {
-                        "item_id": item_info["item_id"],
-                        "web_url": item_info["web_url"],
+                    staged_metadata[filename] = {
                         "content_type": upload_file.content_type,
                         "size": total_bytes,
-                        "uploaded_at": self._format_timestamp(datetime.utcnow()),
                     }
-                    self.logger.info("Session file uploaded to SharePoint for session %s: %s", session_id, filename)
+                    self.logger.info("Session file staged for SharePoint upload: %s / %s", session_id, filename)
             else:
                 upload_root = Path("uploads")
                 target_dir = upload_root / session_id
@@ -540,17 +561,70 @@ class SessionService:
             for upload_file in upload_files:
                 await upload_file.close()
 
-        updated = mark_session_uploaded(session_id, uploaded_at=self._format_timestamp(datetime.utcnow()))
-        if updated is None:
-            self.logger.exception("Failed to update session status after upload %s", session_id)
-            raise HTTPException(status_code=500, detail="Unable to update session status")
-
         if settings.storage_backend.lower() == "sharepoint":
             existing_metadata = record.storage_metadata or {}
-            existing_metadata.update({"backend": "sharepoint", "files": sharepoint_metadata})
+            existing_metadata.update({"backend": "sharepoint", "pending_files": staged_metadata})
             update_storage_metadata(session_id, existing_metadata)
+            updated = update_session_status(session_id, STATUS_UPLOADING)
+            if updated is None:
+                raise HTTPException(status_code=500, detail="Unable to queue SharePoint upload")
+        else:
+            updated = mark_session_uploaded(session_id, uploaded_at=self._format_timestamp(datetime.utcnow()))
+            if updated is None:
+                self.logger.exception("Failed to update session status after upload %s", session_id)
+                raise HTTPException(status_code=500, detail="Unable to update session status")
 
         return updated, filenames
+
+    def upload_staged_files_to_sharepoint(self, session_id: str, filenames: list[str]) -> None:
+        """Upload request-staged files to SharePoint after the HTTP response is sent."""
+        staged_paths = [(Path("uploads").resolve() / ".staging" / session_id / filename).resolve() for filename in filenames]
+        try:
+            if self.sharepoint_service is None:
+                raise RuntimeError("SharePoint storage is not configured")
+            record = get_session_record(session_id)
+            if record is None:
+                raise RuntimeError("Session not found")
+
+            pending_files = record.storage_metadata.get("pending_files", {}) if record.storage_metadata else {}
+            files_metadata: dict[str, object] = {}
+            for filename, staged_path in zip(filenames, staged_paths, strict=True):
+                if not staged_path.is_file():
+                    raise RuntimeError(f"Staged file is missing: {filename}")
+                with staged_path.open("rb") as staged_file:
+                    staged_upload = UploadFile(file=staged_file, filename=filename)
+                    item_info = self.sharepoint_service.upload_file(
+                        record.folder_name or session_id, filename, staged_upload
+                    )
+                files_metadata[filename] = {
+                    "item_id": item_info["item_id"],
+                    "web_url": item_info["web_url"],
+                    "content_type": pending_files.get(filename, {}).get("content_type"),
+                    "size": pending_files.get(filename, {}).get("size", staged_path.stat().st_size),
+                    "uploaded_at": self._format_timestamp(datetime.utcnow()),
+                }
+
+            metadata = record.storage_metadata or {}
+            metadata.update({"backend": "sharepoint", "files": files_metadata})
+            metadata.pop("pending_files", None)
+            update_storage_metadata(session_id, metadata)
+            if mark_session_uploaded(session_id, uploaded_at=self._format_timestamp(datetime.utcnow())) is None:
+                raise RuntimeError("Unable to mark session uploaded")
+            self.logger.info("Staged SharePoint upload completed for session %s", session_id)
+        except Exception:
+            self.logger.exception("Staged SharePoint upload failed for session %s", session_id)
+            try:
+                update_session_status(session_id, STATUS_FAILED)
+            except Exception:
+                self.logger.exception("Unable to mark failed SharePoint upload for session %s", session_id)
+        finally:
+            for staged_path in staged_paths:
+                staged_path.unlink(missing_ok=True)
+            staging_dir = Path("uploads").resolve() / ".staging" / session_id
+            try:
+                staging_dir.rmdir()
+            except OSError:
+                pass
 
     def _sanitize_filename(self, filename: str | None) -> str:
         """Normalize an uploaded filename and prevent path traversal."""

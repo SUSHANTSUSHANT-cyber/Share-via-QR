@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse
 
 from config.settings import settings
@@ -41,6 +41,7 @@ async def upload_page(session_id: str, request: Request) -> HTMLResponse:
 @router.post("/{session_id}")
 async def upload_file(
     session_id: str,
+    background_tasks: BackgroundTasks,
     file: UploadFile | None = File(None),
     files: list[UploadFile] = File(default=[]),
 ) -> dict[str, object]:
@@ -54,17 +55,15 @@ async def upload_file(
     if not upload_files:
         raise HTTPException(status_code=400, detail="At least one file must be uploaded.")
 
-    if len(upload_files) == 1:
-        result, filename = await service.process_upload(session_id, upload_files[0])
-        filenames = [filename]
-    else:
-        result, filenames = await service.process_uploads(session_id, upload_files)
+    result, filenames = await service.process_uploads(session_id, upload_files)
+    if settings.storage_backend.lower() == "sharepoint":
+        background_tasks.add_task(service.upload_staged_files_to_sharepoint, session_id, filenames)
 
-    logger.info("Files uploaded to session %s: %s", session_id, ", ".join(filenames))
+    logger.info("Files accepted for session %s: %s", session_id, ", ".join(filenames))
     return {
         "success": True,
         "session_id": result.session_id,
         "filenames": filenames,
         "status": result.status,
-        "message": "File(s) uploaded successfully.",
+        "message": "File(s) queued for SharePoint upload." if result.status == "uploading" else "File(s) uploaded successfully.",
     }

@@ -133,6 +133,7 @@ function bindDashboard() {
   const dashboardStatusText = document.getElementById("dashboard-status-text");
   let sessionId = null;
   let statusPoll = null;
+  let pollInFlight = false;
 
   if (!form) return;
 
@@ -214,6 +215,11 @@ function bindDashboard() {
       dashboardStatusBadge.classList.add("status-pill--waiting");
       dashboardStatusText.textContent = "Waiting for employee upload.";
       downloadAllButton.disabled = true;
+    } else if (normalized === "uploading") {
+      dashboardStatusBadge.textContent = "UPLOADING";
+      dashboardStatusBadge.classList.add("status-pill--waiting");
+      dashboardStatusText.textContent = "Files are being securely stored. Please wait.";
+      downloadAllButton.disabled = true;
     } else if (normalized === "uploaded") {
       dashboardStatusBadge.textContent = "UPLOAD COMPLETE";
       dashboardStatusBadge.classList.add("status-pill--success");
@@ -229,10 +235,15 @@ function bindDashboard() {
       dashboardStatusBadge.classList.add("status-pill--error");
       dashboardStatusText.textContent = "This session has expired.";
       downloadAllButton.disabled = true;
-    } else {
-      dashboardStatusBadge.textContent = "ERROR";
+    } else if (normalized === "failed") {
+      dashboardStatusBadge.textContent = "UPLOAD FAILED";
       dashboardStatusBadge.classList.add("status-pill--error");
-      dashboardStatusText.textContent = "The session is not available.";
+      dashboardStatusText.textContent = "The file upload could not be completed.";
+      downloadAllButton.disabled = true;
+    } else {
+      dashboardStatusBadge.textContent = "UPDATING";
+      dashboardStatusBadge.classList.add("status-pill--waiting");
+      dashboardStatusText.textContent = "Session status is being updated.";
       downloadAllButton.disabled = true;
     }
 
@@ -312,18 +323,36 @@ function bindDashboard() {
   }
 
   async function pollSessionStatus() {
-    if (!sessionId) return;
+    if (!sessionId || pollInFlight) return;
+
+    const sessionIdToCheck = sessionId;
+    pollInFlight = true;
 
     try {
-      const response = await fetch(`/session/${sessionId}`);
+      const response = await fetch(`/session/${sessionIdToCheck}`);
+      // A session may have been regenerated while this request was in flight.
+      if (sessionId !== sessionIdToCheck) return;
+
       if (!response.ok) {
         if (response.status === 404) {
           setDashboardMessage("Session not found.", true);
+          setStatusBadge("unavailable");
+          clearInterval(statusPoll);
+          statusPoll = null;
+        } else if (response.status === 410) {
+          setDashboardMessage("Session expired.", true);
+          setStatusBadge("expired");
+          clearInterval(statusPoll);
+          statusPoll = null;
         }
         return;
       }
 
       const session = await response.json();
+      if (sessionId !== sessionIdToCheck) return;
+
+      // A successful response is authoritative: remove any stale polling error.
+      setDashboardMessage("");
       await renderUploadedFiles(session.files);
       const status = session.status || "waiting";
       updateDownloadedFileStatus(status, session.files?.[0]?.filename ?? null);
@@ -332,7 +361,10 @@ function bindDashboard() {
         statusPoll = null;
       }
     } catch (error) {
-      setDashboardMessage("Unable to refresh session status.", true);
+      // Network, proxy, timeout, and JSON failures are transient. Keep the
+      // last known valid state visible and let the next poll retry.
+    } finally {
+      pollInFlight = false;
     }
   }
 
