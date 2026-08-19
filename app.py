@@ -7,6 +7,7 @@ files, wires up the routers, and provides a startup hook for logging.
 from __future__ import annotations
 
 import logging
+import sqlite3
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -49,6 +50,44 @@ app.include_router(session_router)
 app.include_router(upload_router)
 app.include_router(download_router)
 app.include_router(status_router)
+
+
+@app.get("/api/analytics/transfers")
+def get_transfer_analytics() -> list[dict[str, object]]:
+    """Return transfer session records for read-only analytics."""
+    connection = sqlite3.connect(settings.database_path)
+    connection.row_factory = sqlite3.Row
+    try:
+        rows = connection.execute(
+            """
+            SELECT session_id, employee_code, hostname, status,
+                   created_at, uploaded_at, downloaded_at
+            FROM transfer_sessions
+            ORDER BY created_at DESC
+            """
+        ).fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        connection.close()
+
+
+@app.get("/api/analytics/hostname-usage")
+def get_hostname_usage_analytics() -> list[dict[str, object]]:
+    """Return transfer counts grouped by receiver hostname."""
+    connection = sqlite3.connect(settings.database_path)
+    connection.row_factory = sqlite3.Row
+    try:
+        rows = connection.execute(
+            """
+            SELECT hostname, COUNT(*) AS transfers
+            FROM transfer_sessions
+            GROUP BY hostname
+            ORDER BY transfers DESC
+            """
+        ).fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        connection.close()
 
 
 @app.on_event("startup")
